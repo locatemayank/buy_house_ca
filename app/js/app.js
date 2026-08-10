@@ -60,14 +60,38 @@
     byZip: {},
     layer: null,
     selected: null,
+    lastFeats: [],
+    view: "map",
+    sortKey: "score",
+    sortDir: -1, // -1 desc, 1 asc
   };
 
   // ---- Map ------------------------------------------------------------------
   var map = L.map("map", { zoomControl: true }).setView([37.35, -121.9], 11);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap contributors",
-  }).addTo(map);
+
+  // CARTO basemap works from file:// (OSM's server blocks no-Referer requests).
+  // Base map is optional — polygons render fine on a plain background too.
+  var baseLayer = null;
+  function addBasemap() {
+    if (baseLayer) return;
+    baseLayer = L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+      {
+        maxZoom: 19,
+        subdomains: "abcd",
+        attribution:
+          "&copy; OpenStreetMap contributors &copy; CARTO",
+      }
+    );
+    baseLayer.addTo(map);
+  }
+  function removeBasemap() {
+    if (baseLayer) {
+      map.removeLayer(baseLayer);
+      baseLayer = null;
+    }
+  }
+  addBasemap();
 
   // ---- Helpers --------------------------------------------------------------
   function haversineMiles(a, b) {
@@ -132,8 +156,111 @@
       }
     ).addTo(map);
 
+    state.lastFeats = feats;
     updateResultsList(feats);
+    renderTable(feats);
     return feats.length;
+  }
+
+  // ---- Table view (no map needed) ------------------------------------------
+  var COLUMNS = [
+    { key: "zip", label: "ZIP", num: false },
+    { key: "city", label: "City", num: false },
+    { key: "county", label: "County", num: false },
+    { key: "score", label: "Score", num: true, get: scoreZone },
+    { key: "school_score", label: "School", num: true },
+    { key: "crime_index", label: "Crime", num: true },
+    { key: "price", label: "Home value", num: true, fmt: fmtMoney },
+    { key: "price_change_1yr", label: "1-yr %", num: true },
+    { key: "median_lot_size_sqft", label: "Lot (sqft)", num: true },
+    { key: "land_area_sqmi", label: "Area (sq mi)", num: true },
+  ];
+
+  function cellVal(p, col) {
+    if (col.get) return col.get(p);
+    return p[col.key];
+  }
+
+  function renderTable(feats) {
+    var thead = document.querySelector("#zoneTable thead");
+    var tbody = document.querySelector("#zoneTable tbody");
+
+    thead.innerHTML =
+      "<tr>" +
+      COLUMNS.map(function (c) {
+        var arrow =
+          state.sortKey === c.key ? (state.sortDir === -1 ? " ▼" : " ▲") : "";
+        return '<th data-key="' + c.key + '">' + c.label + arrow + "</th>";
+      }).join("") +
+      "</tr>";
+
+    var ths = thead.querySelectorAll("th");
+    for (var i = 0; i < ths.length; i++) {
+      ths[i].addEventListener("click", function () {
+        var k = this.getAttribute("data-key");
+        if (state.sortKey === k) state.sortDir *= -1;
+        else {
+          state.sortKey = k;
+          state.sortDir = -1;
+        }
+        renderTable(state.lastFeats);
+      });
+    }
+
+    var col =
+      COLUMNS.filter(function (c) {
+        return c.key === state.sortKey;
+      })[0] || COLUMNS[3];
+
+    var rows = feats.slice().sort(function (a, b) {
+      var va = cellVal(a.properties, col);
+      var vb = cellVal(b.properties, col);
+      if (col.num) {
+        va = va == null ? -Infinity : va;
+        vb = vb == null ? -Infinity : vb;
+        return (va - vb) * state.sortDir;
+      }
+      va = (va || "").toString().toLowerCase();
+      vb = (vb || "").toString().toLowerCase();
+      return va < vb ? -state.sortDir : va > vb ? state.sortDir : 0;
+    });
+
+    tbody.innerHTML = rows
+      .map(function (f) {
+        var p = f.properties;
+        var s = scoreZone(p);
+        var sel = state.selected === p.zip ? ' class="selected"' : "";
+        return (
+          "<tr data-zip=\"" +
+          p.zip +
+          "\"" +
+          sel +
+          ">" +
+          "<td><span class=\"cell-dot\" style=\"background:" +
+          scoreColor(s) +
+          "\"></span>" +
+          p.zip +
+          "</td>" +
+          "<td>" + p.city + "</td>" +
+          "<td>" + p.county + "</td>" +
+          "<td class=\"td-score\">" + s + "</td>" +
+          "<td>" + p.school_score + "</td>" +
+          "<td>" + p.crime_index + "</td>" +
+          "<td>" + fmtMoney(p.price) + "</td>" +
+          "<td>" + (p.price_change_1yr != null ? p.price_change_1yr + "%" : "—") + "</td>" +
+          "<td>" + p.median_lot_size_sqft.toLocaleString() + "</td>" +
+          "<td>" + p.land_area_sqmi + "</td>" +
+          "</tr>"
+        );
+      })
+      .join("");
+
+    var trs = tbody.querySelectorAll("tr");
+    for (var j = 0; j < trs.length; j++) {
+      trs[j].addEventListener("click", function () {
+        selectZone(this.getAttribute("data-zip"));
+      });
+    }
   }
 
   function updateResultsList(feats) {
@@ -208,9 +335,33 @@
     );
   }
 
+  function setView(view) {
+    state.view = view;
+    var mapEl = document.getElementById("map");
+    var tableEl = document.getElementById("tableWrap");
+    var btnMap = document.getElementById("btnMap");
+    var btnTable = document.getElementById("btnTable");
+    if (view === "table") {
+      mapEl.classList.add("hidden");
+      tableEl.classList.remove("hidden");
+      btnTable.classList.add("active");
+      btnMap.classList.remove("active");
+      renderTable(state.lastFeats);
+    } else {
+      tableEl.classList.add("hidden");
+      mapEl.classList.remove("hidden");
+      btnMap.classList.add("active");
+      btnTable.classList.remove("active");
+      setTimeout(function () {
+        map.invalidateSize();
+      }, 0);
+    }
+  }
+
   function selectZone(zip) {
     state.selected = zip;
     if (state.layer) state.layer.setStyle(styleFor);
+    if (state.view === "table") renderTable(state.lastFeats);
     var f = state.byZip[zip];
     if (!f) return;
     var p = f.properties;
@@ -319,6 +470,17 @@
     });
     document.getElementById("radius").addEventListener("change", function () {
       goToZip(padZip(document.getElementById("zip").value));
+    });
+
+    document.getElementById("btnMap").addEventListener("click", function () {
+      setView("map");
+    });
+    document.getElementById("btnTable").addEventListener("click", function () {
+      setView("table");
+    });
+    document.getElementById("basemap").addEventListener("change", function () {
+      if (this.checked) addBasemap();
+      else removeBasemap();
     });
 
     goToZip(DEFAULT_ZIP);

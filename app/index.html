@@ -19,6 +19,11 @@
       </label>
       <button type="submit">Search</button>
     </form>
+    <div class="view-toggle">
+      <button type="button" id="btnMap" class="vt active">Map</button>
+      <button type="button" id="btnTable" class="vt">Table</button>
+      <label class="basemap-toggle"><input type="checkbox" id="basemap" checked /> Base map</label>
+    </div>
     <div id="status" class="status"></div>
   </header>
 
@@ -27,7 +32,15 @@
       <div id="results" class="results"></div>
       <div id="detail" class="detail"></div>
     </aside>
-    <main id="map"></main>
+    <main class="main-area">
+      <div id="map"></div>
+      <div id="tableWrap" class="table-wrap hidden">
+        <table id="zoneTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </main>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
