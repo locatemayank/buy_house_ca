@@ -20,6 +20,11 @@
       <button type="submit">Search</button>
     </form>
     <div class="view-toggle">
+      <span class="tg-label">Level:</span>
+      <button type="button" id="btnZip" class="vt active">ZIP</button>
+      <button type="button" id="btnHood" class="vt">Neighborhood</button>
+      <span class="tg-sep"></span>
+      <span class="tg-label">View:</span>
       <button type="button" id="btnMap" class="vt active">Map</button>
       <button type="button" id="btnTable" class="vt">Table</button>
       <label class="basemap-toggle"><input type="checkbox" id="basemap" checked /> Base map</label>
@@ -44,8 +49,9 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Data as a global (lets the page work by double-clicking index.html, no server needed) -->
+  <!-- Data as globals (lets the page work by double-clicking index.html, no server needed) -->
   <script src="zones.js"></script>
+  <script src="neighborhoods.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -2,6 +2,8 @@
 # (see README "Re-generating the data")
 data/zhvi_zip_raw.csv
 data/ca_zcta_raw.geojson
+data/neigh_zhvi_raw.csv
+data/hoods/
 
 # OS / editor cruft
 .DS_Store
