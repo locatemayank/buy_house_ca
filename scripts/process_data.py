@@ -203,6 +203,15 @@ def main():
     size_mb = os.path.getsize(OUT) / 1e6
     print(f"Wrote {matched} zones to {OUT} ({size_mb:.1f} MB)")
 
+    # Also emit a JS global so the page works by double-clicking index.html
+    # (file:// blocks fetch of zones.json). index.html loads zones.js.
+    out_js = os.path.join(APP, "zones.js")
+    with open(out_js, "w") as f:
+        f.write("window.ZONES = ")
+        json.dump(out, f, separators=(",", ":"))
+        f.write(";\n")
+    print(f"Wrote {out_js} ({os.path.getsize(out_js) / 1e6:.1f} MB)")
+
 
 if __name__ == "__main__":
     main()
