@@ -14,13 +14,17 @@ Two **views**: an interactive Map and a sortable Table (no map needed).
 
 ## Quick start
 
+Open `index.html` directly (double-click), or serve it:
+
 ```bash
-cd ca_zone_finder/app
+cd ca_zone_finder
 python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
-The app is a static site (HTML + Leaflet + vanilla JS modules). No build step.
+The app is a static site (HTML + Leaflet + vanilla JS) at the repo root, so
+**GitHub Pages** works out of the box (Settings → Pages → deploy from branch
+`main`, folder `/root`). No build step.
 
 ## What data is real vs modeled
 
@@ -43,25 +47,26 @@ today. Swap them for real feeds without touching the front-end (see below).
 
 ## Project layout
 
+The web app is at the repo **root** (GitHub Pages friendly):
+
 ```
 ca_zone_finder/
-  data/                    raw downloads (gitignore-able, large)
-    zhvi_zip_raw.csv       Zillow home values by ZIP
-    ca_zcta_raw.geojson    Census ZIP boundaries (CA)
-    hoods/                 neighborhood polygons per CA city (click_that_hood)
-    neigh_zhvi_raw.csv     Zillow neighborhood home values
+  index.html                       app entry (top level)
+  css/style.css
+  js/
+    dataSources.js                 PLUGGABLE data layer (swap backends here)
+    scoring.js                     PLUGGABLE scoring/weights + map coloring
+    app.js                         map + table + search + level/detail wiring
+  zones.json / zones.js            ZIP dataset (1,536 CA ZIPs)
+  neighborhoods.json / neighborhoods.js   neighborhood dataset (763 areas)
   scripts/
-    process_data.py        builds app/zones.json (ZIP level)
-    build_neighborhoods.py builds app/neighborhoods.json (neighborhood level)
-  app/
-    index.html
-    css/style.css
-    js/
-      dataSources.js       PLUGGABLE data layer (swap backends here)
-      scoring.js           PLUGGABLE scoring/weights + map coloring
-      app.js               map + table + search + level/detail wiring
-    zones.json / zones.js              ZIP dataset (1,536 CA ZIPs)
-    neighborhoods.json / neighborhoods.js   neighborhood dataset (763 areas)
+    process_data.py                builds zones.json (ZIP level)
+    build_neighborhoods.py         builds neighborhoods.json (neighborhood level)
+  data/                            raw downloads (gitignored, large)
+    zhvi_zip_raw.csv               Zillow home values by ZIP
+    ca_zcta_raw.geojson            Census ZIP boundaries (CA)
+    hoods/                         neighborhood polygons per CA city
+    neigh_zhvi_raw.csv             Zillow neighborhood home values
 ```
 
 ## Re-generating the data

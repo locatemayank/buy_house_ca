@@ -35,7 +35,8 @@ import hashlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "data")
-APP = os.path.join(HERE, "..", "app")
+# Web app now lives at the repo root (so GitHub Pages serves index.html directly)
+APP = os.path.join(HERE, "..")
 
 ZHVI_CSV = os.path.join(DATA, "zhvi_zip_raw.csv")
 ZCTA_GEO = os.path.join(DATA, "ca_zcta_raw.geojson")

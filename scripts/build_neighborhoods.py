@@ -32,7 +32,8 @@ import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "data")
-APP = os.path.join(HERE, "..", "app")
+# Web app now lives at the repo root (so GitHub Pages serves index.html directly)
+APP = os.path.join(HERE, "..")
 HOODS_DIR = os.path.join(DATA, "hoods")
 NEIGH_ZHVI = os.path.join(DATA, "neigh_zhvi_raw.csv")
 ZONES = os.path.join(APP, "zones.json")
