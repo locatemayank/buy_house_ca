@@ -12,6 +12,33 @@ Two granularity **levels** (toggle in the header):
 
 Two **views**: an interactive Map and a sortable Table (no map needed).
 
+## "Should I buy here?" report
+
+Select any ZIP (click a zone or search) and press **🏡 Should I buy here? —
+Full report** in the detail panel. A slide-in report card answers seven buyer
+questions, each with a 0–100 sub-score, letter grade, plain-English summary,
+supporting facts, and a data-provenance badge, then a weighted **Final Verdict**
+(BUY / CONSIDER / AVOID):
+
+1. Good place to raise a kid? (schools + safety + space)
+2. How safe is it really? (crime vs the rest of CA)
+3. Are we getting good housing value? (price vs county median + momentum)
+4. What environment / geographic risks exist? (wildfire/flood/seismic proxies)
+5. How desirable over 10–20 years? (momentum + schools + price tier)
+6. Commute, restaurants, parks, shopping, airport? (real nearest-airport
+   distance + urbanization proxy)
+7. Why should we NOT buy here? (auto-generated caveats from weakest scores +
+   red flags)
+
+The engine (`js/report.js`) is pure and data-driven. In this first version it
+uses only fields already in `zones.json` plus runtime-derived signals
+(statewide/county percentiles) and one genuinely-real computation (distance to
+the nearest major CA airport). Each section is honestly badged
+`real` / `mixed` / `modeled`. To upgrade a section to a real feed later
+(schools, crime, FEMA flood, CalFire fire-hazard), add the field(s) to
+`zones.json` and adjust that one section's scorer — the UI does not change.
+Default verdict weights live in `DEFAULT_WEIGHTS` in `js/report.js`.
+
 ## Quick start
 
 Open `index.html` directly (double-click), or serve it:
@@ -38,12 +65,19 @@ Each metric is badged in the UI and carries a `provenance` tag in the data.
 | ZIP boundaries + land area | US Census TIGER ZCTA | **real** |
 | Neighborhood boundaries/names | codeforamerica/click_that_hood | **real** |
 | Neighborhood home value | Zillow Neighborhood ZHVI (nearest-ZIP fallback) | **real** |
-| School score | placeholder (deterministic) | modeled |
+| School score | CAASPP (ELA+Math % met/above → statewide 1–10 decile), aggregated per ZIP from `../ca_school_finder` | **real** (`caaspp`) |
 | Crime index | placeholder (deterministic) | modeled |
 | Median lot size | placeholder (deterministic) | modeled |
 
-The `modeled` fields are stable per-ZIP stand-ins so the whole UI works
-today. Swap them for real feeds without touching the front-end (see below).
+School scores are **real** — they are derived from the sibling
+`ca_school_finder` project's CAASPP ratings (`data/ratings.js`) joined to the
+CA DOE school directory (`data/schools.js`) by CDS code, then aggregated to the
+ZIP level (enrollment-weighted mean of each school's most-recent 1–10 rating).
+Neighborhoods inherit the nearest ZIP's real score. A small number of ZIPs with
+no rated schools fall back to a `modeled` placeholder (still badged honestly).
+The remaining `modeled` fields (crime, lot size) are stable per-ZIP stand-ins so
+the whole UI works today; swap them for real feeds without touching the
+front-end (see below).
 
 ## Project layout
 
@@ -72,13 +106,21 @@ ca_zone_finder/
 ## Re-generating the data
 
 ```bash
+# REAL school scores: first build the sibling ca_school_finder data
+# (schools.js + ratings.js), then aggregate it to per-ZIP scores here.
+python3 scripts/build_school_scores.py   # writes data/zip_school_scores.json
+
+```
+
+```bash
 # (only if you want to refresh the raw public files)
 curl -o data/zhvi_zip_raw.csv \
   https://files.zillowstatic.com/research/public_csvs/zhvi/Zip_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv
 curl -o data/ca_zcta_raw.geojson \
   https://raw.githubusercontent.com/OpenDataDE/State-zip-code-GeoJSON/master/ca_california_zip_codes_geo.min.json
 
-python3 scripts/process_data.py   # writes app/zones.json (+ zones.js)
+python3 scripts/process_data.py   # writes zones.json (+ zones.js); uses real
+                                   # school scores from zip_school_scores.json
 
 # Neighborhood level (sub-city areas)
 curl -o data/neigh_zhvi_raw.csv \
@@ -100,8 +142,10 @@ The app was structured so new features/data can drop in with minimal changes:
 
 1. **Replace a modeled metric with a real feed (offline join):**
    edit `build_modeled_metrics()` in `scripts/process_data.py` to join a real
-   dataset (e.g. CA DOE test scores, DOJ crime, ATTOM parcels) and set the
-   corresponding `provenance` to the real source. Re-run the script.
+   dataset (e.g. DOJ crime, ATTOM parcels) and set the corresponding
+   `provenance` to the real source. Re-run the script. (The **school score** is
+   already wired this way — see `scripts/build_school_scores.py`, which joins the
+   `ca_school_finder` CAASPP ratings by CDS and aggregates them per ZIP.)
 
 2. **Add a live data backend (API):**
    implement a new class in `app/js/dataSources.js` with the same
@@ -129,5 +173,6 @@ The app was structured so new features/data can drop in with minimal changes:
 - Rendering is limited to zones within the search radius for performance
   (the full CA GeoJSON is ~51 MB).
 - ZCTA boundaries approximate USPS ZIP delivery areas.
-- School/crime/lot values are placeholders — do not use for real decisions
-  until real feeds are connected.
+- School scores are **real** (CAASPP-derived, per-ZIP); crime/lot values are
+  still placeholders — do not use those for real decisions until real feeds are
+  connected.

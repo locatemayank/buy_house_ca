@@ -65,6 +65,7 @@
     datasets: { zip: null, hood: null },
     level: "zip",
     fc: null, // current dataset
+    reportCtx: null, // precomputed statewide stats for the buyer report
     zipByZip: {}, // ZIP -> feature (for centering, always from ZIP set)
     byId: {}, // id -> feature (current dataset)
     layer: null,
@@ -345,10 +346,94 @@
       extraRows +
       "</div>" +
       '<div class="bars">' + bar("Schools", m.school) + bar("Safety", m.safety) + "</div>" +
+      (p.zip
+        ? '<button type="button" id="btnReport" class="report-btn">🏡 Should I buy here? — Full report</button>'
+        : "") +
       '<p class="note">Badged <span class="badge real">real</span> = Zillow / Census / ' +
-      "public boundaries. <span class=\"badge modeled\">modeled</span> = placeholder " +
-      "until a live feed is connected.</p>";
+      "public boundaries / CAASPP school ratings. <span class=\"badge modeled\">modeled</span> = " +
+      "placeholder (crime, lot size) until a live feed is connected.</p>";
     panel.classList.add("visible");
+    var rb = document.getElementById("btnReport");
+    if (rb) rb.addEventListener("click", function () { openReport(p); });
+  }
+
+  // ---- Buyer report (slide-in) ----------------------------------------------
+  function reportProvBadge(prov) {
+    if (prov === "real")
+      return '<span class="badge real" title="Backed by real data">real</span>';
+    if (prov === "mixed")
+      return '<span class="badge mixed" title="Mix of real and placeholder">mixed</span>';
+    return '<span class="badge modeled" title="Placeholder value">modeled</span>';
+  }
+
+  function openReport(p) {
+    if (!window.ZoneReport) return;
+    if (!state.reportCtx) state.reportCtx = window.ZoneReport.buildContext(state.datasets.zip);
+    var rep = window.ZoneReport.buildReport(p, state.reportCtx, window.ZoneFinder.reportWeights);
+    renderReport(rep);
+    document.getElementById("reportOverlay").classList.remove("hidden");
+    var panel = document.getElementById("reportPanel");
+    panel.classList.remove("hidden");
+    panel.setAttribute("aria-hidden", "false");
+    setTimeout(function () { panel.classList.add("open"); }, 10);
+  }
+
+  function closeReport() {
+    var panel = document.getElementById("reportPanel");
+    panel.classList.remove("open");
+    panel.setAttribute("aria-hidden", "true");
+    setTimeout(function () {
+      panel.classList.add("hidden");
+      document.getElementById("reportOverlay").classList.add("hidden");
+    }, 250);
+  }
+
+  function renderReport(rep) {
+    var v = rep.verdict;
+    var sub = (rep.city || "") + (rep.county ? ", " + rep.county + " County" : "");
+    var html =
+      '<div class="report-top">' +
+        '<button type="button" id="btnReportClose" class="report-close" aria-label="Close">✕</button>' +
+        '<div class="report-title">🏡 ' + rep.zip + ' <small>' + sub + '</small></div>' +
+        '<div class="verdict verdict-' + v.tone + '">' +
+          '<div class="verdict-label">' + v.label + '</div>' +
+          '<div class="verdict-score">' + v.overall + '<span>/100 · ' + v.grade + '</span></div>' +
+        '</div>' +
+      '</div>';
+
+    html += '<div class="report-sections">';
+    rep.sections.forEach(function (sec) {
+      var isWhy = sec.id === "whynot";
+      html += '<section class="rep-sec' + (isWhy ? " rep-why" : "") + '">';
+      html += '<div class="rep-sec-head">';
+      html += '<h3>' + sec.title + " " + reportProvBadge(sec.provenance) + "</h3>";
+      if (sec.score != null) {
+        html += '<span class="rep-grade" style="background:' + scoreColor(sec.score) + '">' +
+          sec.score + " · " + sec.grade + "</span>";
+      }
+      html += "</div>";
+      html += '<p class="rep-summary">' + sec.summary + "</p>";
+      if (sec.facts && sec.facts.length) {
+        html += '<div class="rep-facts">';
+        sec.facts.forEach(function (fct) {
+          html += '<div class="rep-fact"><span class="rf-label">' + fct.label + "</span>" +
+            '<span class="rf-value">' + fct.value +
+            (fct.note ? ' <em>' + fct.note + "</em>" : "") + "</span></div>";
+        });
+        html += "</div>";
+      }
+      html += "</section>";
+    });
+    html += "</div>";
+
+    html += '<p class="report-foot">Scores blend real data (Zillow prices, Census ' +
+      "boundaries, airport distances, CAASPP school ratings) with modeled placeholders " +
+      "(crime, hazards) until live feeds are connected. Verify crime, FEMA flood " +
+      "maps, and CalFire fire-hazard zones before buying.</p>";
+
+    document.getElementById("reportBody").innerHTML = html;
+    var c = document.getElementById("btnReportClose");
+    if (c) c.addEventListener("click", closeReport);
   }
 
   function selectNearest(center) {
@@ -420,6 +505,10 @@
     document.getElementById("btnTable").addEventListener("click", function () { setView("table"); });
     document.getElementById("basemap").addEventListener("change", function () {
       if (this.checked) addBasemap(); else removeBasemap();
+    });
+    document.getElementById("reportOverlay").addEventListener("click", closeReport);
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") closeReport();
     });
 
     goToZip(DEFAULT_ZIP);

@@ -48,10 +48,17 @@
     </main>
   </div>
 
+  <!-- Slide-in "Should I buy here?" report -->
+  <div id="reportOverlay" class="report-overlay hidden"></div>
+  <aside id="reportPanel" class="report-panel hidden" aria-hidden="true">
+    <div id="reportBody" class="report-body"></div>
+  </aside>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- Data as globals (lets the page work by double-clicking index.html, no server needed) -->
   <script src="zones.js"></script>
   <script src="neighborhoods.js"></script>
+  <script src="js/report.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

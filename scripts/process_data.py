@@ -17,7 +17,8 @@ Metric provenance (IMPORTANT / honest labeling):
   price, price_change_1yr    -> "zillow"  (REAL)
   land_area_sqmi             -> "census"  (REAL, from ZCTA land area)
   city, county               -> "zillow"  (REAL)
-  school_score               -> "modeled" (PLACEHOLDER, deterministic)
+  school_score               -> "caaspp"  (REAL, from ca_school_finder ratings)
+                                fallback "modeled" only where no rated schools
   crime_index                -> "modeled" (PLACEHOLDER, deterministic)
   median_lot_size_sqft       -> "modeled" (PLACEHOLDER, deterministic)
 
@@ -40,6 +41,9 @@ APP = os.path.join(HERE, "..")
 
 ZHVI_CSV = os.path.join(DATA, "zhvi_zip_raw.csv")
 ZCTA_GEO = os.path.join(DATA, "ca_zcta_raw.geojson")
+# REAL per-ZIP school scores derived from the CA School Finder's CAASPP ratings
+# (see scripts/build_school_scores.py). {zip: {score, n, year}}
+SCHOOL_SCORES = os.path.join(DATA, "zip_school_scores.json")
 OUT = os.path.join(APP, "zones.json")
 
 COORD_PRECISION = 4  # ~11 m; keeps file small enough for the browser
@@ -49,6 +53,16 @@ def stable_unit(zip_code: str, salt: str) -> float:
     """Deterministic pseudo-random float in [0,1) from zip+salt."""
     h = hashlib.md5(f"{zip_code}:{salt}".encode()).hexdigest()
     return int(h[:8], 16) / 0xFFFFFFFF
+
+
+def load_school_scores():
+    """Return {zip: {score(1-10), n, year}} of REAL CAASPP-derived scores."""
+    if not os.path.exists(SCHOOL_SCORES):
+        print(f"  WARNING: {SCHOOL_SCORES} missing — run build_school_scores.py "
+              f"first. School scores will fall back to modeled placeholders.")
+        return {}
+    with open(SCHOOL_SCORES) as f:
+        return json.load(f)
 
 
 def load_zhvi():
@@ -143,12 +157,17 @@ def main():
     zhvi = load_zhvi()
     print(f"  {len(zhvi)} CA ZIPs with prices")
 
+    print("Loading REAL school scores (CAASPP via ca_school_finder)...")
+    school_scores = load_school_scores()
+    print(f"  {len(school_scores)} ZIPs with real school scores")
+
     print("Loading ZCTA boundaries...")
     with open(ZCTA_GEO) as f:
         gj = json.load(f)
 
     features = []
     matched = 0
+    real_school = 0
     for feat in gj["features"]:
         props = feat.get("properties", {})
         zip_code = str(props.get("ZCTA5CE10", "")).zfill(5)
@@ -158,7 +177,19 @@ def main():
         z = zhvi[zip_code]
         land_sqmi = round(props.get("ALAND10", 0) / 2_589_988.0, 2)  # m^2 -> mi^2
 
-        school_score, crime_index, median_lot = build_modeled_metrics(zip_code, z["price"])
+        m_school, crime_index, median_lot = build_modeled_metrics(zip_code, z["price"])
+
+        # Prefer the REAL CAASPP-derived school score when we have rated
+        # schools in this ZIP; otherwise fall back to the modeled placeholder.
+        real = school_scores.get(zip_code)
+        if real and real.get("score") is not None:
+            school_score = real["score"]
+            school_prov = "caaspp"
+            real_school += 1
+        else:
+            school_score = m_school
+            school_prov = "modeled"
+
         score = composite_score(school_score, crime_index)
 
         try:
@@ -186,7 +217,7 @@ def main():
                 "city": "zillow",
                 "county": "zillow",
                 "land_area_sqmi": "census",
-                "school_score": "modeled",
+                "school_score": school_prov,
                 "crime_index": "modeled",
                 "median_lot_size_sqft": "modeled",
             },
@@ -203,6 +234,8 @@ def main():
         json.dump(out, f, separators=(",", ":"))
     size_mb = os.path.getsize(OUT) / 1e6
     print(f"Wrote {matched} zones to {OUT} ({size_mb:.1f} MB)")
+    print(f"  school_score: {real_school} REAL (caaspp), "
+          f"{matched - real_school} modeled fallback")
 
     # Also emit a JS global so the page works by double-clicking index.html
     # (file:// blocks fetch of zones.json). index.html loads zones.js.

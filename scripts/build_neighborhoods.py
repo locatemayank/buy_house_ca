@@ -15,7 +15,10 @@ Metric provenance:
   price -> "zillow_neighborhood" when matched to Zillow neighborhood ZHVI,
         -> "zillow_zip_nearest"  when falling back to the nearest ZIP's price.
   price_change_1yr, county      -> from nearest ZIP (zillow)  [real]
-  school_score/crime_index/lot  -> "modeled" (same deterministic model as ZIPs)
+  school_score                  -> "caaspp" (REAL) taken from the nearest ZIP's
+                                   CAASPP-derived score; "modeled" only where the
+                                   nearest ZIP has no rated schools.
+  crime_index/lot               -> "modeled" (same deterministic model as ZIPs)
 
 Outputs:
   - app/neighborhoods.json
@@ -37,6 +40,8 @@ APP = os.path.join(HERE, "..")
 HOODS_DIR = os.path.join(DATA, "hoods")
 NEIGH_ZHVI = os.path.join(DATA, "neigh_zhvi_raw.csv")
 ZONES = os.path.join(APP, "zones.json")
+# REAL per-ZIP CAASPP-derived school scores (see build_school_scores.py)
+SCHOOL_SCORES = os.path.join(DATA, "zip_school_scores.json")
 
 OUT_JSON = os.path.join(APP, "neighborhoods.json")
 OUT_JS = os.path.join(APP, "neighborhoods.js")
@@ -165,6 +170,16 @@ def load_zips():
     return zips
 
 
+def load_school_scores():
+    """Return {zip: {score(1-10), n, year}} of REAL CAASPP-derived scores."""
+    if not os.path.exists(SCHOOL_SCORES):
+        print(f"  WARNING: {SCHOOL_SCORES} missing — run build_school_scores.py "
+              f"first. Neighborhood school scores fall back to modeled.")
+        return {}
+    with open(SCHOOL_SCORES) as f:
+        return json.load(f)
+
+
 def nearest_zip(lat, lon, zips):
     best = None
     best_d = 1e18
@@ -181,9 +196,12 @@ def main():
     print(f"Zillow neighborhood prices: {len(by_city_name)} (city,name) keys")
     zips = load_zips()
     print(f"ZIP zones for fallback: {len(zips)}")
+    school_scores = load_school_scores()
+    print(f"ZIPs with REAL school scores: {len(school_scores)}")
 
     features = []
     matched_zillow = 0
+    real_school = 0
     for path in sorted(glob.glob(os.path.join(HOODS_DIR, "*.geojson"))):
         fname = os.path.splitext(os.path.basename(path))[0]
         file_city = CITY_FROM_FILE.get(fname, fname.replace("-", " "))
@@ -202,6 +220,7 @@ def main():
             nz = nearest_zip(lat, lon, zips)
             county = nz["county"] if nz else None
             price_change = nz["price_change_1yr"] if nz else None
+            nz_zip = nz["zip"] if nz else None
 
             # price: prefer real Zillow neighborhood match
             price = None
@@ -218,7 +237,18 @@ def main():
                 price_prov = "zillow_zip_nearest"
 
             key = (file_city or region_label or fname) + ":" + nname
-            school, crime, lot = build_modeled(key, price)
+            m_school, crime, lot = build_modeled(key, price)
+
+            # Prefer the REAL CAASPP-derived score from the nearest ZIP.
+            real = school_scores.get(nz_zip) if nz_zip else None
+            if real and real.get("score") is not None:
+                school = real["score"]
+                school_prov = "caaspp"
+                real_school += 1
+            else:
+                school = m_school
+                school_prov = "modeled"
+
             score = composite(school, crime)
 
             display_city = (
@@ -247,7 +277,7 @@ def main():
                     "city": "click_that_hood",
                     "county": "zillow" if county else "modeled",
                     "land_area_sqmi": "modeled",
-                    "school_score": "modeled",
+                    "school_score": school_prov,
                     "crime_index": "modeled",
                     "median_lot_size_sqft": "modeled",
                 },
@@ -273,6 +303,8 @@ def main():
         f"Wrote {len(features)} neighborhoods "
         f"({matched_zillow} priced from Zillow neighborhood, rest nearest-ZIP)"
     )
+    print(f"  school_score: {real_school} REAL (caaspp via nearest ZIP), "
+          f"{len(features) - real_school} modeled fallback")
     print(f"  {OUT_JSON} ({os.path.getsize(OUT_JSON)/1e6:.1f} MB)")
     print(f"  {OUT_JS} ({os.path.getsize(OUT_JS)/1e6:.1f} MB)")
 

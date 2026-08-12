@@ -86,8 +86,83 @@ header {
 
 .note { font-size: 11px; color: #64748b; line-height: 1.5; }
 
+.badge.mixed { background: #e0f2fe; color: #075985; }
+
+/* "Should I buy here?" button in the detail panel */
+.report-btn {
+  width: 100%; margin: 6px 0 12px; padding: 11px 12px; border: none;
+  border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 700;
+  color: #04283a; background: #38bdf8;
+}
+.report-btn:hover { background: #0ea5e9; color: #fff; }
+
+/* Slide-in report overlay + panel */
+.report-overlay {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45);
+  z-index: 1000; opacity: 1; transition: opacity 0.25s ease;
+}
+.report-overlay.hidden { display: none; }
+
+.report-panel {
+  position: fixed; top: 0; right: 0; height: 100%; width: 480px; max-width: 92vw;
+  background: #f8fafc; z-index: 1001; box-shadow: -8px 0 30px rgba(15, 23, 42, 0.25);
+  transform: translateX(100%); transition: transform 0.25s ease;
+  overflow-y: auto;
+}
+.report-panel.open { transform: translateX(0); }
+.report-panel.hidden { display: none; }
+
+.report-body { padding: 0 0 24px; }
+
+.report-top {
+  position: sticky; top: 0; z-index: 2; padding: 16px 20px 14px;
+  background: #0f172a; color: #fff;
+}
+.report-close {
+  position: absolute; top: 12px; right: 14px; border: none; cursor: pointer;
+  background: transparent; color: #cbd5e1; font-size: 20px; line-height: 1;
+}
+.report-close:hover { color: #fff; }
+.report-title { font-size: 22px; font-weight: 700; }
+.report-title small { display: block; font-size: 13px; color: #94a3b8; font-weight: 400; margin-top: 2px; }
+
+.verdict {
+  margin-top: 12px; padding: 12px 14px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.verdict-buy { background: #14532d; }
+.verdict-consider { background: #78350f; }
+.verdict-avoid { background: #7f1d1d; }
+.verdict-label { font-size: 22px; font-weight: 800; letter-spacing: 0.04em; }
+.verdict-score { font-size: 26px; font-weight: 800; }
+.verdict-score span { font-size: 12px; font-weight: 500; color: #e2e8f0; margin-left: 4px; }
+
+.report-sections { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.rep-sec { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; }
+.rep-sec.rep-why { background: #fff7ed; border-color: #fed7aa; }
+.rep-sec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.rep-sec-head h3 { margin: 0; font-size: 15px; color: #0f172a; line-height: 1.35; }
+.rep-grade {
+  flex: none; color: #fff; font-weight: 700; font-size: 13px;
+  padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+}
+.rep-summary { margin: 8px 0 6px; font-size: 13px; color: #334155; line-height: 1.5; }
+
+.rep-facts { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.rep-fact {
+  display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px;
+  padding: 5px 8px; background: #f1f5f9; border-radius: 6px;
+}
+.rep-why .rep-fact { background: #ffedd5; display: block; }
+.rf-label { color: #475569; }
+.rf-value { color: #0f172a; font-weight: 600; text-align: right; }
+.rf-value em { color: #64748b; font-weight: 400; font-style: normal; }
+
+.report-foot { padding: 0 20px; font-size: 11px; color: #64748b; line-height: 1.6; }
+
 @media (max-width: 720px) {
   .layout { flex-direction: column; }
   .sidebar { width: 100%; height: 45%; }
   #map { height: 55%; }
+  .report-panel { width: 100%; }
 }
