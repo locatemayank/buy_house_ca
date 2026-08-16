@@ -1,0 +1,13 @@
+{
+  "name": "CA School Rating Map",
+  "short_name": "School Ratings",
+  "description": "Explore California public school ratings (1-10) on a map. Elementary, Middle, High or Average; 2025 data plus extrapolated 2026-2028.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f766e",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
