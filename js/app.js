@@ -15,26 +15,26 @@
   var POINTS = window.SCHOOL_POINTS || [];
 
   var state = {
-    level: "ALL",     // ALL | E | M | H
-    year: "2025",     // 2025 | 2026 | 2027 | 2028
-    display: "dots",  // dots | gradient
+    level: "ALL",         // ALL | E | M | H
+    year: "2025",         // 2025 | 2026 | 2027 | 2028
+    display: "gradient",  // dots | gradient  (gradient is the default)
     minRate: 1,
     query: ""
   };
 
   var LEVEL_NAME = { E: "Elementary", M: "Middle", H: "High" };
 
-  /* ---------- color scale (RdYlGn, 1..10) ---------- */
+  /* ---------- color scale (pessimistic: NO green until 8) ---------- */
   var STOPS = [
-    [1,  0xd7, 0x30, 0x27],
-    [2,  0xf4, 0x6d, 0x43],
-    [3,  0xfd, 0xae, 0x61],
-    [4,  0xfe, 0xe0, 0x8b],
-    [5,  0xf7, 0xf7, 0x7a],
-    [6,  0xd9, 0xef, 0x8b],
-    [7,  0xa6, 0xd9, 0x6a],
-    [8,  0x66, 0xbd, 0x63],
-    [9,  0x2d, 0xa8, 0x54],
+    [1,  0xa5, 0x00, 0x26], // deep red
+    [2,  0xd7, 0x30, 0x27],
+    [3,  0xf4, 0x6d, 0x43],
+    [4,  0xf8, 0x8d, 0x51], // orange
+    [5,  0xfd, 0xae, 0x61],
+    [6,  0xfe, 0xe0, 0x8b], // amber
+    [7,  0xff, 0xff, 0xbf], // pale yellow (still no green)
+    [8,  0xa6, 0xd9, 0x6a], // green tinge begins at 8
+    [9,  0x66, 0xbd, 0x63],
     [10, 0x1a, 0x98, 0x50]
   ];
   function rgbFor(rating) {
@@ -74,23 +74,43 @@
     setPoints: function (pts) { this._pts = pts; if (this._map) this._draw(); return this; },
     onAdd: function (map) {
       this._map = map;
-      var c = this._canvas = L.DomUtil.create("canvas", "leaflet-gradient-layer leaflet-layer");
+      var animated = map.options.zoomAnimation && L.Browser.any3d;
+      var c = this._canvas = L.DomUtil.create(
+        "canvas",
+        "leaflet-gradient-layer leaflet-layer leaflet-zoom-" + (animated ? "animated" : "hide")
+      );
       c.style.position = "absolute";
       c.style.pointerEvents = "none";
       map.getPanes().overlayPane.appendChild(c);
-      map.on("moveend zoomend resize", this._reset, this);
       this._reset();
     },
-    onRemove: function (map) {
-      map.off("moveend zoomend resize", this._reset, this);
+    onRemove: function () {
       if (this._canvas && this._canvas.parentNode) {
         this._canvas.parentNode.removeChild(this._canvas);
       }
       this._canvas = null;
     },
+    // Leaflet auto-binds these to the map, incl. the zoom animation frame,
+    // so the gradient scales/pans in lock-step with the tile layer.
+    getEvents: function () {
+      var events = { viewreset: this._reset, moveend: this._reset, resize: this._reset };
+      if (this._map && this._map.options.zoomAnimation && L.Browser.any3d) {
+        events.zoomanim = this._animateZoom;
+      }
+      return events;
+    },
+    _animateZoom: function (e) {
+      var scale = this._map.getZoomScale(e.zoom);
+      var offset = this._map._getCenterOffset(e.center)
+        ._multiplyBy(-scale)
+        .subtract(this._map._getMapPanePos());
+      L.DomUtil.setTransform(this._canvas, offset, scale);
+    },
     _reset: function () {
+      if (!this._canvas) return;
       var size = this._map.getSize();
       var topLeft = this._map.containerPointToLayerPoint([0, 0]);
+      // setPosition writes a plain translate (scale 1), clearing any zoom-anim transform.
       L.DomUtil.setPosition(this._canvas, topLeft);
       this._canvas.width = size.x;
       this._canvas.height = size.y;
