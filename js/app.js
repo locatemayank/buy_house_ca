@@ -114,16 +114,10 @@
       L.DomUtil.setPosition(this._canvas, topLeft);
       this._canvas.width = size.x;
       this._canvas.height = size.y;
-      this._scheduleDraw();
-    },
-    // Coalesce redraws into the next animation frame so panning/zooming stays smooth.
-    _scheduleDraw: function () {
-      if (this._raf) return;
-      var self = this;
-      this._raf = requestAnimationFrame(function () {
-        self._raf = null;
-        self._draw();
-      });
+      // Draw synchronously here: resizing the canvas (above) clears it, so a
+      // deferred draw would leave a one-frame blank flash on zoom-end. The
+      // low-res offscreen render is cheap enough to run inline smoothly.
+      this._draw();
     },
     _draw: function () {
       if (!this._canvas) return;
