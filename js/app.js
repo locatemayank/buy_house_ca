@@ -114,28 +114,48 @@
       L.DomUtil.setPosition(this._canvas, topLeft);
       this._canvas.width = size.x;
       this._canvas.height = size.y;
-      this._draw();
+      this._scheduleDraw();
+    },
+    // Coalesce redraws into the next animation frame so panning/zooming stays smooth.
+    _scheduleDraw: function () {
+      if (this._raf) return;
+      var self = this;
+      this._raf = requestAnimationFrame(function () {
+        self._raf = null;
+        self._draw();
+      });
     },
     _draw: function () {
       if (!this._canvas) return;
       var map = this._map, w = this._canvas.width, h = this._canvas.height;
       var ctx = this._canvas.getContext("2d");
       ctx.clearRect(0, 0, w, h);
-      if (!this._pts.length) return;
+      if (!this._pts.length || w === 0 || h === 0) return;
 
-      // Project visible points to container pixels (+ margin).
-      var margin = 90;
+      // Render the IDW field into a small OFF-SCREEN canvas, then upscale it with
+      // bilinear smoothing. This cuts pixel work ~6x and yields a smooth surface.
+      var RES = 0.4;
+      var ow = Math.max(1, Math.round(w * RES));
+      var oh = Math.max(1, Math.round(h * RES));
+      if (!this._off) this._off = document.createElement("canvas");
+      var off = this._off;
+      off.width = ow; off.height = oh;
+      var octx = off.getContext("2d");
+
+      // Project visible points to off-screen pixels (+ margin).
+      var margin = 40; // off-screen px
       var pxs = [];
       for (var i = 0; i < this._pts.length; i++) {
         var p = this._pts[i];
         var cp = map.latLngToContainerPoint([p.lat, p.lon]);
-        if (cp.x < -margin || cp.x > w + margin || cp.y < -margin || cp.y > h + margin) continue;
-        pxs.push({ x: cp.x, y: cp.y, r: p.r });
+        var ox0 = cp.x * RES, oy0 = cp.y * RES;
+        if (ox0 < -margin || ox0 > ow + margin || oy0 < -margin || oy0 > oh + margin) continue;
+        pxs.push({ x: ox0, y: oy0, r: p.r });
       }
       if (!pxs.length) return;
 
-      // Spatial buckets to keep IDW fast even statewide.
-      var maxR = 85, maxR2 = maxR * maxR, bs = maxR;
+      // Spatial buckets to keep IDW fast.
+      var maxR = 38, maxR2 = maxR * maxR, bs = maxR;
       var buckets = {};
       for (var k = 0; k < pxs.length; k++) {
         var bx = Math.floor(pxs[k].x / bs), by = Math.floor(pxs[k].y / bs);
@@ -143,41 +163,40 @@
         (buckets[key] || (buckets[key] = [])).push(pxs[k]);
       }
 
-      var step = 6;
-      var img = ctx.createImageData(w, h);
+      var img = octx.createImageData(ow, oh);
       var data = img.data;
-      for (var y = 0; y < h; y += step) {
-        for (var x = 0; x < w; x += step) {
-          var gbx = Math.floor(x / bs), gby = Math.floor(y / bs);
+      for (var y = 0; y < oh; y++) {
+        var gby = Math.floor(y / bs);
+        for (var x = 0; x < ow; x++) {
+          var gbx = Math.floor(x / bs);
           var wsum = 0, vsum = 0;
-          for (var ox = -1; ox <= 1; ox++) {
-            for (var oy = -1; oy <= 1; oy++) {
-              var arr = buckets[(gbx + ox) + "_" + (gby + oy)];
+          for (var bxo = -1; bxo <= 1; bxo++) {
+            for (var byo = -1; byo <= 1; byo++) {
+              var arr = buckets[(gbx + bxo) + "_" + (gby + byo)];
               if (!arr) continue;
               for (var m = 0; m < arr.length; m++) {
                 var dx = x - arr[m].x, dy = y - arr[m].y, d2 = dx * dx + dy * dy;
                 if (d2 > maxR2) continue;
-                var wgt = 1 / (d2 + 25);
+                var wgt = 1 / (d2 + 6);
                 wsum += wgt; vsum += wgt * arr[m].r;
               }
             }
           }
           if (wsum <= 0) continue;
           var col = rgbFor(vsum / wsum);
-          // fill the step x step block
-          for (var yy = y; yy < y + step && yy < h; yy++) {
-            var base = (yy * w + x) * 4;
-            for (var xx = 0; xx < step && (x + xx) < w; xx++) {
-              var idx = base + xx * 4;
-              data[idx] = col[0];
-              data[idx + 1] = col[1];
-              data[idx + 2] = col[2];
-              data[idx + 3] = 165; // ~0.65 opacity
-            }
-          }
+          var idx = (y * ow + x) * 4;
+          data[idx] = col[0];
+          data[idx + 1] = col[1];
+          data[idx + 2] = col[2];
+          data[idx + 3] = 165; // ~0.65 opacity
         }
       }
-      ctx.putImageData(img, 0, 0);
+      octx.putImageData(img, 0, 0);
+
+      // Smoothly upscale the low-res field to the full canvas.
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(off, 0, 0, ow, oh, 0, 0, w, h);
     }
   });
   var gradientLayer = new GradientLayer();
