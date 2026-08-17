@@ -68,59 +68,78 @@
   var canvasRenderer = L.canvas({ padding: 0.5 });
   var dotLayer = L.layerGroup().addTo(map);
 
-  /* ---------- gradient (IDW) canvas layer ---------- */
+  /* ---------- gradient (IDW) canvas layer ----------
+   * Mirrors Leaflet's own L.Renderer zoom handling so the surface scales/pans
+   * frame-by-frame in lock-step with the basemap during zoom animations. */
   var GradientLayer = L.Layer.extend({
+    options: { padding: 0.25 },
     initialize: function () { this._pts = []; },
     setPoints: function (pts) { this._pts = pts; if (this._map) this._draw(); return this; },
     onAdd: function (map) {
       this._map = map;
-      var animated = map.options.zoomAnimation && L.Browser.any3d;
-      var c = this._canvas = L.DomUtil.create(
-        "canvas",
-        "leaflet-gradient-layer leaflet-layer leaflet-zoom-" + (animated ? "animated" : "hide")
-      );
-      c.style.position = "absolute";
-      c.style.pointerEvents = "none";
-      map.getPanes().overlayPane.appendChild(c);
-      this._reset();
+      if (!this._canvas) {
+        var animated = map.options.zoomAnimation && L.Browser.any3d;
+        var c = this._canvas = L.DomUtil.create(
+          "canvas",
+          "leaflet-gradient-layer leaflet-layer leaflet-zoom-" + (animated ? "animated" : "hide")
+        );
+        c.style.position = "absolute";
+        c.style.pointerEvents = "none";
+      }
+      map.getPanes().overlayPane.appendChild(this._canvas);
+      this._update();
     },
     onRemove: function () {
       if (this._canvas && this._canvas.parentNode) {
         this._canvas.parentNode.removeChild(this._canvas);
       }
-      this._canvas = null;
     },
-    // Leaflet auto-binds these to the map, incl. the zoom animation frame,
-    // so the gradient scales/pans in lock-step with the tile layer.
     getEvents: function () {
-      var events = { viewreset: this._reset, moveend: this._reset, resize: this._reset };
+      var events = { viewreset: this._reset, moveend: this._reset, resize: this._reset, zoom: this._onZoom };
       if (this._map && this._map.options.zoomAnimation && L.Browser.any3d) {
-        events.zoomanim = this._animateZoom;
+        events.zoomanim = this._onAnimZoom;
       }
       return events;
     },
-    _animateZoom: function (e) {
-      var scale = this._map.getZoomScale(e.zoom);
-      var offset = this._map._getCenterOffset(e.center)
-        ._multiplyBy(-scale)
-        .subtract(this._map._getMapPanePos());
-      L.DomUtil.setTransform(this._canvas, offset, scale);
+    _onZoom: function () {
+      this._updateTransform(this._map.getCenter(), this._map.getZoom());
+    },
+    _onAnimZoom: function (e) {
+      this._updateTransform(e.center, e.zoom);
+    },
+    // Exact Leaflet L.Renderer transform: translate + scale relative to the
+    // center/zoom captured when the surface was last drawn.
+    _updateTransform: function (center, zoom) {
+      var scale = this._map.getZoomScale(zoom, this._zoom);
+      var viewHalf = this._map.getSize().multiplyBy(0.5 + this.options.padding);
+      var currentCenterPoint = this._map.project(this._center, zoom);
+      var topLeftOffset = viewHalf.multiplyBy(-scale)
+        .add(currentCenterPoint)
+        .subtract(this._map._getNewPixelOrigin(center, zoom));
+      L.DomUtil.setTransform(this._canvas, topLeftOffset, scale);
     },
     _reset: function () {
+      this._update();
+      if (this._map.options.zoomAnimation && L.Browser.any3d) {
+        this._updateTransform(this._map.getCenter(), this._map.getZoom());
+      }
+    },
+    // Size & position the canvas over the padded viewport (like L.Renderer).
+    _update: function () {
       if (!this._canvas) return;
-      var size = this._map.getSize();
-      var topLeft = this._map.containerPointToLayerPoint([0, 0]);
-      // setPosition writes a plain translate (scale 1), clearing any zoom-anim transform.
-      L.DomUtil.setPosition(this._canvas, topLeft);
+      var p = this.options.padding, mapSize = this._map.getSize();
+      var min = this._map.containerPointToLayerPoint(mapSize.multiplyBy(-p)).round();
+      this._bounds = L.bounds(min, min.add(mapSize.multiplyBy(1 + p * 2)).round());
+      this._center = this._map.getCenter();
+      this._zoom = this._map.getZoom();
+      var size = this._bounds.getSize();
+      L.DomUtil.setPosition(this._canvas, this._bounds.min);
       this._canvas.width = size.x;
       this._canvas.height = size.y;
-      // Draw synchronously here: resizing the canvas (above) clears it, so a
-      // deferred draw would leave a one-frame blank flash on zoom-end. The
-      // low-res offscreen render is cheap enough to run inline smoothly.
       this._draw();
     },
     _draw: function () {
-      if (!this._canvas) return;
+      if (!this._canvas || !this._bounds) return;
       var map = this._map, w = this._canvas.width, h = this._canvas.height;
       var ctx = this._canvas.getContext("2d");
       ctx.clearRect(0, 0, w, h);
@@ -138,13 +157,14 @@
       off.width = ow; off.height = oh;
       var octx = off.getContext("2d");
 
-      // Project visible points to off-screen pixels (+ margin).
-      var margin = 40; // off-screen px
+      // Project points to canvas pixels (layer point minus canvas origin), scaled
+      // down to off-screen resolution. Skip anything well outside the canvas.
+      var bmin = this._bounds.min, margin = 40;
       var pxs = [];
       for (var i = 0; i < this._pts.length; i++) {
         var p = this._pts[i];
-        var cp = map.latLngToContainerPoint([p.lat, p.lon]);
-        var ox0 = cp.x * RES, oy0 = cp.y * RES;
+        var lp = map.latLngToLayerPoint([p.lat, p.lon]);
+        var ox0 = (lp.x - bmin.x) * RES, oy0 = (lp.y - bmin.y) * RES;
         if (ox0 < -margin || ox0 > ow + margin || oy0 < -margin || oy0 > oh + margin) continue;
         pxs.push({ x: ox0, y: oy0, r: p.r });
       }
