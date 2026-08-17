@@ -1,5 +1,5 @@
 /* CA School Rating Map — service worker (offline-friendly PWA) */
-const CACHE = "ca-school-rating-v1";
+const CACHE = "ca-school-rating-v2";
 const ASSETS = [
   "./",
   "./index.html",
