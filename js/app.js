@@ -131,8 +131,10 @@
       var RES = 0.4;
       var ow = Math.max(1, Math.round(w * RES));
       var oh = Math.max(1, Math.round(h * RES));
-      if (!this._off) this._off = document.createElement("canvas");
-      var off = this._off;
+      if (!this._offCanvas || typeof this._offCanvas.getContext !== "function") {
+        this._offCanvas = document.createElement("canvas");
+      }
+      var off = this._offCanvas;
       off.width = ow; off.height = oh;
       var octx = off.getContext("2d");
 
