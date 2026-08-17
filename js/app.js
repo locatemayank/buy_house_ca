@@ -388,6 +388,37 @@
     controls.classList.add("collapsed");
   }
 
+  /* ---------- geolocation ---------- */
+  function locateUser() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        var lat = pos.coords.latitude, lon = pos.coords.longitude;
+        map.setView([lat, lon], 12);
+
+        // Accuracy halo + "you are here" dot.
+        L.circle([lat, lon], {
+          radius: Math.min(pos.coords.accuracy || 300, 2000),
+          color: "#2563eb",
+          weight: 1,
+          fillColor: "#3b82f6",
+          fillOpacity: 0.12
+        }).addTo(map);
+
+        var here = L.circleMarker([lat, lon], {
+          radius: 8,
+          color: "#ffffff",
+          weight: 3,
+          fillColor: "#2563eb",
+          fillOpacity: 1
+        }).addTo(map);
+        here.bindPopup("<b>You are here</b>").openPopup();
+      },
+      function () { /* denied / unavailable — keep San Jose default */ },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
+    );
+  }
+
   /* ---------- boot ---------- */
   function boot() {
     var loading = document.getElementById("loading");
@@ -398,6 +429,9 @@
     render();
     loading.classList.add("hidden");
     setTimeout(function () { map.invalidateSize(); }, 100);
+
+    // On first load, try to center on the user's current location.
+    locateUser();
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("sw.js").catch(function () {});
